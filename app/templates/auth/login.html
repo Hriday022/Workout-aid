@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Log in — Gym Tracker{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <h1>Log in</h1>
+  <form method="POST" novalidate>
+    {{ form.hidden_tag() }}
+    <label>{{ form.username.label }}{{ form.username(autofocus=true) }}</label>
+    {% for e in form.username.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+
+    <label>{{ form.password.label }}{{ form.password() }}</label>
+    {% for e in form.password.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+
+    <button type="submit" class="btn btn-primary btn-block">Log in</button>
+  </form>
+  <p class="auth-switch">No account? <a href="{{ url_for('auth.signup') }}">Sign up</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Gym Tracker{% endblock %}
+
+{% macro entry_row(entry, form) %}
+<tr class="entry-row" id="entry-{{ entry.id }}">
+  <td class="col-exercise">{{ entry.exercise_name }}</td>
+  <td class="col-num">{{ entry.sets if entry.sets is not none else "—" }}</td>
+  <td class="col-num">{{ entry.reps if entry.reps is not none else "—" }}</td>
+  <td class="col-num">
+    {% if entry.weight is not none %}{{ entry.weight | round(1) }} {{ entry.weight_unit or "" }}{% else %}—{% endif %}
+  </td>
+  <td class="col-date">{{ entry.entry_date.strftime("%d %b %Y") if entry.entry_date else "—" }}</td>
+  <td class="col-notes">{{ entry.notes or "" }}</td>
+  <td class="col-actions">
+    <button type="button" class="btn-icon" data-toggle="edit-{{ entry.id }}" aria-label="Edit">Edit</button>
+    <form method="POST" action="{{ url_for('workouts.delete_entry', entry_id=entry.id) }}"
+          class="inline-form" data-confirm="Delete this entry?">
+      {{ form.hidden_tag() }}
+      <button type="submit" class="btn-icon btn-danger">Delete</button>
+    </form>
+  </td>
+</tr>
+<tr class="edit-row" id="edit-{{ entry.id }}" hidden>
+  <td colspan="7">
+    <form method="POST" action="{{ url_for('workouts.edit_entry', entry_id=entry.id) }}" class="edit-form">
+      {{ form.hidden_tag() }}
+      <input type="text" name="exercise_name" value="{{ entry.exercise_name }}" placeholder="Exercise" required>
+      <input type="number" name="sets" value="{{ entry.sets if entry.sets is not none else '' }}" placeholder="Sets">
+      <input type="number" name="reps" value="{{ entry.reps if entry.reps is not none else '' }}" placeholder="Reps">
+      <input type="number" step="0.1" name="weight" value="{{ entry.weight if entry.weight is not none else '' }}" placeholder="Weight">
+      <select name="weight_unit">
+        <option value="kg" {% if entry.weight_unit == "kg" %}selected{% endif %}>kg</option>
+        <option value="lb" {% if entry.weight_unit == "lb" %}selected{% endif %}>lb</option>
+      </select>
+      <input type="date" name="entry_date" value="{{ entry.entry_date.isoformat() if entry.entry_date else '' }}">
+      <input type="text" name="notes" value="{{ entry.notes or '' }}" placeholder="Notes" maxlength="300">
+      <button type="submit" class="btn btn-primary btn-sm">Save</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-toggle="edit-{{ entry.id }}">Cancel</button>
+    </form>
+  </td>
+</tr>
+{% endmacro %}
+
+{% block content %}
+<section class="panel hero-panel">
+  <div class="hero-text">
+    <span class="eyebrow">Your log</span>
+    <h1>Track every rep.</h1>
+    <p class="hint">Upload a workout PDF and let it auto-extract your sets, or log entries by hand. Want a guided
+      session with built-in rest timers instead? Head to <a href="{{ url_for('routines.list_routines') }}">Splits</a>.</p>
+  </div>
+  <form method="POST" action="{{ url_for('workouts.upload') }}" enctype="multipart/form-data" class="upload-form">
+    {{ upload_form.hidden_tag() }}
+    <label class="file-drop">
+      {{ upload_form.pdf_file(accept="application/pdf") }}
+      <span>Choose PDF</span>
+    </label>
+    <button type="submit" class="btn btn-primary">Upload &amp; extract</button>
+  </form>
+</section>
+
+<section class="add-panel">
+  <details>
+    <summary>+ Add an entry manually</summary>
+    <form method="POST" action="{{ url_for('workouts.add_entry') }}" class="edit-form">
+      {{ entry_form.hidden_tag() }}
+      <input type="text" name="exercise_name" placeholder="Exercise" required>
+      <input type="number" name="sets" placeholder="Sets">
+      <input type="number" name="reps" placeholder="Reps">
+      <input type="number" step="0.1" name="weight" placeholder="Weight">
+      <select name="weight_unit">
+        <option value="kg">kg</option>
+        <option value="lb">lb</option>
+      </select>
+      <input type="date" name="entry_date">
+      <input type="text" name="notes" placeholder="Notes" maxlength="300">
+      <button type="submit" class="btn btn-primary btn-sm">Add</button>
+    </form>
+  </details>
+</section>
+
+{% if not uploads and not unassigned_entries and not sessions %}
+  <div class="empty-state">
+    <p>No workouts logged yet. Upload a PDF above, add an entry manually, or
+      <a href="{{ url_for('routines.list_routines') }}">start a guided split</a> to get going.</p>
+  </div>
+{% endif %}
+
+{% if sessions %}
+  <h2 class="section-heading">Guided sessions</h2>
+  {% for session in sessions %}
+  <section class="upload-group session-group">
+    <div class="upload-group-header">
+      <div>
+        <h2>{{ session.day_name }}</h2>
+        <span class="meta">{{ session.routine_name }}
+          &middot; {{ session.entry_date.strftime("%d %b %Y") if session.entry_date else "—" }}
+          &middot; {{ session.entries | length }} exercises logged</span>
+      </div>
+      <span class="badge badge-glow">✓ Completed</span>
+    </div>
+    <table class="entry-table">
+      <thead>
+        <tr><th>Exercise</th><th>Sets</th><th>Reps</th><th>Weight</th><th>Date</th><th>Notes</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for entry in session.entries %}
+          {{ entry_row(entry, entry_form) }}
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+{% endif %}
+
+{% if uploads %}<h2 class="section-heading">Uploaded PDFs</h2>{% endif %}
+{% for upload_row in uploads %}
+  <section class="upload-group">
+    <div class="upload-group-header">
+      <div>
+        <h2>{{ upload_row.original_filename }}</h2>
+        <span class="meta">{{ upload_row.uploaded_at.strftime("%d %b %Y, %H:%M") }} UTC
+          &middot; {{ upload_row.entry_count }} entries
+          &middot; parsed via {{ "Claude" if upload_row.parse_method == "claude" else "pattern matching" }}</span>
+      </div>
+      <form method="POST" action="{{ url_for('workouts.delete_upload', upload_id=upload_row.id) }}"
+            class="inline-form" data-confirm="Delete this upload and all {{ upload_row.entry_count }} entries?">
+        {{ upload_form.hidden_tag() }}
+        <button type="submit" class="btn btn-danger btn-sm">Delete upload</button>
+      </form>
+    </div>
+    <table class="entry-table">
+      <thead>
+        <tr><th>Exercise</th><th>Sets</th><th>Reps</th><th>Weight</th><th>Date</th><th>Notes</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for entry in upload_row.entries %}
+          {{ entry_row(entry, entry_form) }}
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endfor %}
+
+{% if unassigned_entries %}
+  <h2 class="section-heading">Manually added</h2>
+  <section class="upload-group">
+    <table class="entry-table">
+      <thead>
+        <tr><th>Exercise</th><th>Sets</th><th>Reps</th><th>Weight</th><th>Date</th><th>Notes</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for entry in unassigned_entries %}
+          {{ entry_row(entry, entry_form) }}
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}
+{% endblock %}
